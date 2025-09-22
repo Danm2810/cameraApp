@@ -1,5 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:camera/camera.dart';
+import 'package:provider/provider.dart';
+import '../services/storage_service.dart';
+import '../state/gallery_store.dart';
+import 'gallery_screen.dart';
 
 class CameraScreen extends StatefulWidget {
   const CameraScreen({Key? key}) : super(key: key);
@@ -21,21 +25,12 @@ class _CameraScreenState extends State<CameraScreen> {
 
   Future<void> _setupCamera() async {
     try {
-      // Get list of available cameras
       final cameras = await availableCameras();
-
       if (cameras.isEmpty) {
         setState(() => _noCameraFound = true);
         return;
       }
-
-      final firstCamera = cameras.first;
-
-      _controller = CameraController(
-        firstCamera,
-        ResolutionPreset.medium,
-      );
-
+      _controller = CameraController(cameras.first, ResolutionPreset.medium);
       _initializeControllerFuture = _controller!.initialize();
       if (mounted) setState(() {});
     } catch (e) {
@@ -50,6 +45,12 @@ class _CameraScreenState extends State<CameraScreen> {
     super.dispose();
   }
 
+  void _goToGallery() {
+    Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => const GalleryScreen()),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_noCameraFound) {
@@ -59,22 +60,17 @@ class _CameraScreenState extends State<CameraScreen> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(Icons.error_outline, size: 80, color: Colors.red),
+              const Icon(Icons.error_outline, size: 80, color: Colors.redAccent),
               const SizedBox(height: 16),
               const Text(
                 "No Camera Detected",
                 style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
               ),
-              const SizedBox(height: 8),
+              const SizedBox(height: 12),
               ElevatedButton(
-                onPressed: () {
-                  // Navigate to gallery or other parts of your app
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text("Navigate to gallery")),
-                  );
-                },
+                onPressed: _goToGallery,
                 child: const Text("Go to Gallery"),
-              )
+              ),
             ],
           ),
         ),
@@ -82,41 +78,49 @@ class _CameraScreenState extends State<CameraScreen> {
     }
 
     if (_controller == null) {
-      return const Scaffold(
-        body: Center(child: CircularProgressIndicator()),
-      );
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
 
-      return Scaffold(
-      backgroundColor: const Color(0xFF343541), // GPT dark gray
+    return Scaffold(
       appBar: AppBar(
-        backgroundColor: const Color(0xFF202123), // darker bar
-        title: const Text("Camera App"),
+        title: const Text('Camera'),
+        actions: [
+          IconButton(
+            onPressed: _goToGallery,
+            icon: const Icon(Icons.photo_library_outlined),
+            tooltip: 'Open Gallery',
+          )
+        ],
       ),
-      body: Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(Icons.error_outline, size: 80, color: Colors.redAccent),
-            const SizedBox(height: 16),
-            const Text(
-              "No Camera Detected",
-              style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-                color: Colors.white, // important for contrast
-              ),
-            ),
-            const SizedBox(height: 8),
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.deepPurple,
-              ),
-              onPressed: () {},
-              child: const Text("Go to Gallery"),
-            ),
-          ],
-        ),
+      body: FutureBuilder(
+        future: _initializeControllerFuture,
+        builder: (context, snap) {
+          if (snap.connectionState == ConnectionState.done) {
+            return CameraPreview(_controller!);
+          }
+          return const Center(child: CircularProgressIndicator());
+        },
+      ),
+      floatingActionButton: FloatingActionButton(
+        onPressed: () async {
+          try {
+            await _initializeControllerFuture;
+            final xfile = await _controller!.takePicture();
+            final saved = await StorageService.saveCapture(xfile);
+            if (!mounted) return;
+            context.read<GalleryStore>().addPath(saved.path);
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Saved to gallery')),
+            );
+          } catch (e) {
+            debugPrint("Capture error: $e");
+            if (!mounted) return;
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('Error: $e')),
+            );
+          }
+        },
+        child: const Icon(Icons.camera),
       ),
     );
   }
