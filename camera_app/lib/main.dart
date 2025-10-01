@@ -1,35 +1,41 @@
+import 'dart:io' show Platform;
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+import 'package:camera/camera.dart';
 import 'package:provider/provider.dart';
+import 'package:permission_handler/permission_handler.dart';
+
 import 'screens/camera_screen.dart';
 import 'state/gallery_store.dart';
 
-void main() {
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+
+  // Request permission only on mobile platforms
+  if (!kIsWeb && (Platform.isAndroid || Platform.isIOS)) {
+    await Permission.camera.request();
+  }
+
+  // 👇 These lines go here
+  final cameras = await availableCameras();  
   runApp(
     ChangeNotifierProvider(
       create: (_) => GalleryStore(),
-      child: const MyApp(),
+      child: MyApp(cameras: cameras),
     ),
   );
 }
 
 class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+  const MyApp({super.key, required this.cameras});
+  final List<CameraDescription> cameras;
 
-@override
+  @override
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
-      theme: ThemeData.dark().copyWith(
-        scaffoldBackgroundColor: const Color.fromARGB(255, 40, 41, 51),
-        appBarTheme: const AppBarTheme(
-          backgroundColor: Color.fromARGB(255, 23, 25, 41),
-          titleTextStyle: TextStyle(
-            color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
-        ),
-        textTheme: const TextTheme(bodyMedium: TextStyle(color: Colors.white)),
-      ),
-      home: const CameraScreen(),
+      theme: ThemeData.dark(),
+      home: CameraScreen(cameras: cameras),
     );
   }
 }
-
